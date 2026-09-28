@@ -168,6 +168,8 @@ if 'answers' not in st.session_state:
     st.session_state.answers = {}
 if 'submitted' not in st.session_state:
     st.session_state.submitted = False
+if 'admin_logged_in' not in st.session_state:
+    st.session_state.admin_logged_in = False
 
 st.title("Hadeeqa Manpower Recruitment Agency")
 st.caption("Saudi Aramco WPR Grand Test - 100 Questions")
@@ -289,10 +291,25 @@ elif st.session_state.submitted:
 # ---------------------------------------------------------
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔒 Admin Result Portal")
-admin_pass = st.sidebar.text_input("Admin Password", type="password")
 
-if admin_pass == ADMIN_PASSWORD:
+if not st.session_state.admin_logged_in:
+    with st.sidebar.form("admin_login_form"):
+        admin_pass = st.text_input("Admin Password", type="password")
+        login_btn = st.form_submit_button("Login")
+        
+        if login_btn:
+            if admin_pass == ADMIN_PASSWORD:
+                st.session_state.admin_logged_in = True
+                st.rerun()
+            else:
+                st.error("Incorrect Password!")
+
+if st.session_state.admin_logged_in:
     st.sidebar.success("Admin Logged In!")
+    if st.sidebar.button("Logout Admin"):
+        st.session_state.admin_logged_in = False
+        st.rerun()
+        
     df_results = load_results()
     
     st.subheader("📊 Candidate Live Results (Admin View)")
