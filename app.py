@@ -2,28 +2,18 @@ import streamlit as st
 import time
 
 # ---------------------------------------------------------
-# Page Config & Custom Styling
+# Page Config & Styling
 # ---------------------------------------------------------
 st.set_page_config(page_title="Hadeeqa Manpower - WPR Grand Test", page_icon="📝", layout="centered")
 
-st.markdown("""
-    
-""", unsafe_allow_html=True)
-
-# ---------------------------------------------------------
-# 1. SLIDING NAME BANNER
-# ---------------------------------------------------------
-st.markdown("""
-    
-        🌟 Created by: Hadeeqa Manpower Recruitment Agency | Saudi Aramco WPR Grand Test (100 MCQs) 🌟
-    
-""", unsafe_allow_html=True)
+# Header & Banner
+st.info("🌟 Created by: Hadeeqa Manpower Recruitment Agency | Saudi Aramco WPR Grand Test (100 MCQs) 🌟")
 
 TOTAL_TIME_SECONDS = 60 * 60  # 60 Minutes
 PASS_PERCENT = 80
 
 # ---------------------------------------------------------
-# 2. EXACT 100 MCQs WITH SHUFFLED ANSWERS (A, B, C, D)
+# EXACT 100 MCQs WITH SHUFFLED ANSWERS (A, B, C, D)
 # ---------------------------------------------------------
 QUESTIONS = [
     {"n": 1, "q": "For how long a certificate is issued to Issuer and receiver?", "options": ["2 Years", "2 Months", "3 Years", "2 ½ Years"], "answer": 0},
@@ -140,5 +130,107 @@ if 'answers' not in st.session_state:
 if 'submitted' not in st.session_state:
     st.session_state.submitted = False
 
-# Title
-st.markdown("
+# App Titles
+st.title("Hadeeqa Manpower Recruitment Agency")
+st.caption("Saudi Aramco WPR Grand Test - 100 Questions")
+
+# ---------------------------------------------------------
+# SCREEN 1: Candidate Form
+# ---------------------------------------------------------
+if not st.session_state.started and not st.session_state.submitted:
+    with st.form("student_info"):
+        st.subheader("Candidate Information")
+        name = st.text_input("Candidate Full Name *")
+        roll = st.text_input("Roll / Badge Number *")
+        email = st.text_input("Email Address *")
+        
+        btn = st.form_submit_button("Start 60-Minute Grand Test")
+        
+        if btn:
+            if name and roll and email:
+                st.session_state.student_name = name
+                st.session_state.student_roll = roll
+                st.session_state.student_email = email
+                st.session_state.started = True
+                st.session_state.start_time = time.time()
+                st.rerun()
+            else:
+                st.error("Please fill all required details!")
+
+# ---------------------------------------------------------
+# SCREEN 2: Question Engine & Live Timer
+# ---------------------------------------------------------
+elif st.session_state.started and not st.session_state.submitted:
+    elapsed_time = int(time.time() - st.session_state.start_time)
+    remaining_time = TOTAL_TIME_SECONDS - elapsed_time
+    
+    if remaining_time <= 0:
+        st.session_state.submitted = True
+        st.error("⏰ Time is UP! Your 60 minutes have expired. Auto-submitting test...")
+        st.rerun()
+
+    mins, secs = divmod(remaining_time, 60)
+    
+    st.sidebar.markdown("### ⏱️ Time Remaining")
+    st.sidebar.title(f"{mins:02d}:{secs:02d}")
+    st.sidebar.progress(remaining_time / TOTAL_TIME_SECONDS)
+    
+    q_data = QUESTIONS[st.session_state.q_index]
+    progress = (st.session_state.q_index + 1) / len(QUESTIONS)
+    st.progress(progress)
+    st.caption(f"Question {st.session_state.q_index + 1} of {len(QUESTIONS)}")
+    
+    st.markdown(f"### Q{q_data['n']}: {q_data['q']}")
+    
+    already_selected = st.session_state.answers.get(q_data['n'], None)
+    
+    selected_option = st.radio(
+        "Select Option:", 
+        q_data['options'], 
+        index=already_selected if already_selected is not None else 0,
+        disabled=(already_selected is not None)
+    )
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if already_selected is None:
+            if st.button("Lock Answer & Next"):
+                idx = q_data['options'].index(selected_option)
+                st.session_state.answers[q_data['n']] = idx
+                
+                if st.session_state.q_index + 1 < len(QUESTIONS):
+                    st.session_state.q_index += 1
+                else:
+                    st.session_state.submitted = True
+                st.rerun()
+        else:
+            if st.button("Next Question"):
+                if st.session_state.q_index + 1 < len(QUESTIONS):
+                    st.session_state.q_index += 1
+                else:
+                    st.session_state.submitted = True
+                st.rerun()
+
+# ---------------------------------------------------------
+# SCREEN 3: Result
+# ---------------------------------------------------------
+elif st.session_state.submitted:
+    score = 0
+    total = len(QUESTIONS)
+    
+    for q in QUESTIONS:
+        if st.session_state.answers.get(q['n']) == q['answer']:
+            score += 1
+            
+    percentage = round((score / total) * 100, 2)
+    
+    st.success("✅ Grand Test Submitted Successfully!")
+    st.markdown(f"**Candidate:** {st.session_state.student_name} (Roll/Badge: {st.session_state.student_roll})")
+    st.markdown(f"**Your Score:** {score} / {total} ({percentage}%)")
+    
+    if percentage >= PASS_PERCENT:
+        st.balloons()
+        st.success("🎉 Status: PASS")
+    else:
+        st.error("❌ Status: FAIL (Passing Requirement: 80%)")
