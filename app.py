@@ -1,16 +1,55 @@
 import streamlit as st
 import time
+import pandas as pd
+import os
 
 # ---------------------------------------------------------
 # Page Config & Styling
 # ---------------------------------------------------------
 st.set_page_config(page_title="Hadeeqa Manpower - WPR Grand Test", page_icon="📝", layout="centered")
 
-# Header & Banner
-st.info("🌟 Created by: Hadeeqa Manpower Recruitment Agency | Saudi Aramco WPR Grand Test (100 MCQs) 🌟")
+# 1. SLIDING NAME BANNER
+st.markdown("""
+    
+        🌟 Created by: Hadeeqa Manpower Recruitment Agency | Saudi Aramco WPR Grand Test (100 MCQs) 🌟
+    
+""", unsafe_allow_html=True)
 
 TOTAL_TIME_SECONDS = 60 * 60  # 60 Minutes
 PASS_PERCENT = 80
+RESULTS_FILE = "student_results.csv"
+
+# 🔒 STRONG ADMIN PASSWORD SET HERE
+ADMIN_PASSWORD = "HadeeqaWPR@2026!"
+
+# ---------------------------------------------------------
+# File Helper Functions for Results Storage
+# ---------------------------------------------------------
+def load_results():
+    if os.path.exists(RESULTS_FILE):
+        return pd.read_csv(RESULTS_FILE)
+    else:
+        return pd.DataFrame(columns=["Name", "Roll_Number", "Email", "Score", "Percentage", "Status", "Submission_Time"])
+
+def save_result(name, roll, email, score, total, percentage, status):
+    df = load_results()
+    new_entry = pd.DataFrame([{
+        "Name": name,
+        "Roll_Number": str(roll).strip(),
+        "Email": email,
+        "Score": f"{score}/{total}",
+        "Percentage": f"{percentage}%",
+        "Status": status,
+        "Submission_Time": time.strftime("%Y-%m-%d %H:%M:%S")
+    }])
+    df = pd.concat([df, new_entry], ignore_index=True)
+    df.to_csv(RESULTS_FILE, index=False)
+
+def is_already_submitted(roll_no):
+    df = load_results()
+    if df.empty:
+        return False
+    return str(roll_no).strip() in df["Roll_Number"].astype(str).str.strip().values
 
 # ---------------------------------------------------------
 # EXACT 100 MCQs WITH SHUFFLED ANSWERS (A, B, C, D)
@@ -130,12 +169,11 @@ if 'answers' not in st.session_state:
 if 'submitted' not in st.session_state:
     st.session_state.submitted = False
 
-# App Titles
 st.title("Hadeeqa Manpower Recruitment Agency")
 st.caption("Saudi Aramco WPR Grand Test - 100 Questions")
 
 # ---------------------------------------------------------
-# SCREEN 1: Candidate Form
+# SCREEN 1: Candidate Form (With Single-Attempt Check)
 # ---------------------------------------------------------
 if not st.session_state.started and not st.session_state.submitted:
     with st.form("student_info"):
@@ -148,12 +186,15 @@ if not st.session_state.started and not st.session_state.submitted:
         
         if btn:
             if name and roll and email:
-                st.session_state.student_name = name
-                st.session_state.student_roll = roll
-                st.session_state.student_email = email
-                st.session_state.started = True
-                st.session_state.start_time = time.time()
-                st.rerun()
+                if is_already_submitted(roll):
+                    st.error(f"❌ Roll Number '{roll}' has ALREADY attempted this test! Single-attempt limit applies.")
+                else:
+                    st.session_state.student_name = name
+                    st.session_state.student_roll = str(roll).strip()
+                    st.session_state.student_email = email
+                    st.session_state.started = True
+                    st.session_state.start_time = time.time()
+                    st.rerun()
             else:
                 st.error("Please fill all required details!")
 
@@ -166,7 +207,6 @@ elif st.session_state.started and not st.session_state.submitted:
     
     if remaining_time <= 0:
         st.session_state.submitted = True
-        st.error("⏰ Time is UP! Your 60 minutes have expired. Auto-submitting test...")
         st.rerun()
 
     mins, secs = divmod(remaining_time, 60)
@@ -213,7 +253,7 @@ elif st.session_state.started and not st.session_state.submitted:
                 st.rerun()
 
 # ---------------------------------------------------------
-# SCREEN 3: Result
+# SCREEN 3: Result Submission (Hidden Score for Candidate)
 # ---------------------------------------------------------
 elif st.session_state.submitted:
     score = 0
@@ -224,13 +264,45 @@ elif st.session_state.submitted:
             score += 1
             
     percentage = round((score / total) * 100, 2)
+    status = "PASS" if percentage >= PASS_PERCENT else "FAIL"
     
+    # Save to Excel/CSV in background
+    if 'saved' not in st.session_state:
+        save_result(
+            st.session_state.student_name,
+            st.session_state.student_roll,
+            st.session_state.student_email,
+            score,
+            total,
+            percentage,
+            status
+        )
+        st.session_state.saved = True
+    
+    st.balloons()
     st.success("✅ Grand Test Submitted Successfully!")
-    st.markdown(f"**Candidate:** {st.session_state.student_name} (Roll/Badge: {st.session_state.student_roll})")
-    st.markdown(f"**Your Score:** {score} / {total} ({percentage}%)")
+    st.info(f" Candidate: **{st.session_state.student_name}** | Roll/Badge: **{st.session_state.student_roll}**")
+    st.warning("🔒 Note: Your score has been recorded safely. The final result will be officially announced by Hadeeqa Manpower Recruitment Agency.")
+
+# ---------------------------------------------------------
+# SECRET ADMIN PORTAL (In Sidebar)
+# ---------------------------------------------------------
+st.sidebar.markdown("---")
+st.sidebar.subheader("🔒 Admin Result Portal")
+admin_pass = st.sidebar.text_input("Admin Password", type="password")
+
+if admin_pass == ADMIN_PASSWORD:
+    st.sidebar.success("Admin Logged In!")
+    df_results = load_results()
     
-    if percentage >= PASS_PERCENT:
-        st.balloons()
-        st.success("🎉 Status: PASS")
-    else:
-        st.error("❌ Status: FAIL (Passing Requirement: 80%)")
+    st.subheader("📊 Candidate Live Results (Admin View)")
+    st.dataframe(df_results)
+    
+    # Download Excel/CSV Report
+    csv_data = df_results.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="📥 Download All Results (Excel/CSV)",
+        data=csv_data,
+        file_name="WPR_Grand_Test_Results.csv",
+        mime="text/csv"
+    )
